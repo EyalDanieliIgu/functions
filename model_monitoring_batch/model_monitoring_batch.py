@@ -31,6 +31,9 @@ class TotalVarianceDistance:
     distrib_u: np.ndarray
 
     def compute(self) -> float:
+        print('EYAL TEST FROM PRINT')
+        logger.info('EYAL TEST FROM LOGGER INFO')
+
         return np.sum(np.abs(self.distrib_t - self.distrib_u)) / 2
 
 
