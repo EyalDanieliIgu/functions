@@ -15,7 +15,7 @@
 
 
 from typing import Any, Dict, List, Union
-
+from mlrun.frameworks._common import ModelHandler
 import mlrun
 
 try:
@@ -78,11 +78,48 @@ def _prepare_result_set(
         [x, pd.DataFrame(y_pred, columns=label_columns, index=x.index)], axis=1
     )
 
+def _get_model_handler(context: mlrun.MLClientCtx, model_path: Union[str, mlrun.DataItem], model_name: str = "",framework: str = "") -> ModelHandler:
+    """Return a `ModelHandler` object based on the provided path.
+
+    :param context:                                 MLRun context.
+    :param model_path:                              The model stored path. Can be provided as a store URI (`store://...`) or
+                                                    as a `mlrun.DataItem` object or as a full path to the actual model directory
+                                                    (e.g. `v3io:///...`). In case the model path is the actual directory,
+                                                    you will have to provide model name and a framework (e.g. `xgboost`).
+    :param model_name:                              Model displayed name.
+    :param framework:                               The model's framework. If None, MLRun will try to figure out the framework.
+
+    """
+
+    # importing the os module
+    import os
+
+    # to get the current working directory
+    directory = os.getcwd()
+
+    print('[EYAL]: current directory: ', directory)
+    print('[EYAL]: list directory: ', os.listdir(directory))
+    print('[EYAL]: root: ', os.path.dirname(os.path.abspath(__file__)))
+    print('[EYAL]: list root: ', os.listdir(os.path.dirname(os.path.abspath(__file__))))
+    print('[EYAL]: model_path type: ', type(model_path))
+
+    if isinstance(model_path, mlrun.DataItem):
+        print('[EYAL]: downloading model path')
+        model_path.local()
+
+        print('[EYAL]: model path downloaded')
+        model_path = model_path.artifact_url
+        print('[EYAL]: model path downloaded done: ', model_path)
+    elif not mlrun.datastore.is_store_uri(model_path):
+        return AutoMLRun.load_model(model_name=model_name, model_path=model_path, context=context, framework=framework)
+    return AutoMLRun.load_model(model_path=model_path, context=context)
 
 def infer(
     context: mlrun.MLClientCtx,
     dataset: Union[mlrun.DataItem, list, dict, pd.DataFrame, pd.Series, np.ndarray],
     model_path: Union[str, mlrun.DataItem],
+    framework: str = "",
+    model_name: str = "",
     drop_columns: Union[str, List[str], int, List[int]] = None,
     label_columns: Union[str, List[str]] = None,
     feature_columns: Union[str, List[str]] = None,
@@ -165,10 +202,8 @@ def infer(
 
     # Loading the model:
     context.logger.info(f"Loading model...")
-    if isinstance(model_path, mlrun.DataItem):
-        model_path = model_path.artifact_url
-    model_handler = AutoMLRun.load_model(model_path=model_path, context=context)
 
+    model_handler = _get_model_handler(context=context, model_path=model_path, model_name=model_name, framework=framework)
     if label_columns is None:
         label_columns = [
             output.name for output in model_handler._model_artifact.spec.outputs
@@ -222,7 +257,7 @@ def infer(
             project=context.project,
             context=context,
             endpoint_id=endpoint_id,
-            model_path=model_path,
+            model_path=model_handler._model_path,
             model_endpoint_name=model_endpoint_name,
             infer_results_df=result_set.copy(),
             sample_set_statistics=sample_set_statistics,
